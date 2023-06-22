@@ -267,7 +267,8 @@ best_solution, best_distance = genetic_tsp(
     chart,
     plot,
     progress_bar,
-    current_distance)
+    current_distance,
+)
 
 progress_bar.empty()
 current_distance.empty()
