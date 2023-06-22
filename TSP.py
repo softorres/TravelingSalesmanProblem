@@ -1,288 +1,120 @@
-#TSP project
-#Purpose: From the starting point of the path, we wanna find the shorterst path of the distance.
-#Last day edited: 6/20/2023
-#Autors: Mia Marte, Sofia Torres, Stephanie Saenz
-
-import random
-
-import numpy as np
-import pandas as pd
 import streamlit as st
-#import permutation
-from collections import namedtuple
-from numpy.random import permutation
-from copy import copy
+import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
+import math
+import random
+import itertools
+from gurobipy import *
+plt.rcParams['savefig.pad_inches'] = 0
+st.title('Travelling salesman problem')
 
+# Callback - use lazy constraints to eliminate sub-tours
 
-
-#from streamlit_solver import genetic_tsp
-#from utils import read_input
-
-st.set_page_config(layout="wide")
-
-"""
-# Genetic TSP
-
-Demo of genetic algorithm solver for the Traveling Salesman Problem.
-
-Feel free to play with the parameters in the sidebar and see how they impact the
-solution.
-
-"""
-col1, col2 = st.columns(2)
-
-col1.header("Best solution")
-progress_bar = st.empty()
-current_distance = st.empty()
-plot = col1.empty()
-done = st.empty()
-final_distance = st.empty()
-
-optimal_distances = {
-    "p01.in": 284,
-    "dj15.in": 3172,
-    "dj38.in": 6656,
-    "att48.in": 33523,
-    "qa194.in": 9352,
-}
-
-optimal_distance = st.write(
-    f"**Optimal Distance:** {optimal_distances[select_dataset]}"
-)
-
-col2.header("Distance over time")
-df = pd.DataFrame({"Distance": []})
-chart = col2.empty()
-
-
-## Run the Genetic Algorithm
-best_solution, best_distance = genetic_tsp(
-    select_dataset,
-    num_generations,
-    population_size,
-    mutation_prob,
-    chart,
-    plot,
-    progress_bar,
-    current_distance,
-)
-
-progress_bar.empty()
-current_distance.empty()
-
-cities = read_input(f"data/{select_dataset}")
-
-
-done.write("**Done**!")
-final_distance.write(f"**Final Distance:** {best_distance}")
-
-
-
-#######
-with st.sidebar:
-    select_dataset = st.selectbox(
-        label="Select a dataset",
-        options=("p01.in", "dj15.in", "dj38.in", "att48.in", "qa194.in"),
-    )
-
-    num_generations = st.number_input(
-        "Number of generations", min_value=10, max_value=5000, step=10
-    )
-
-    population_size = st.number_input(
-        "Population size", min_value=10, max_value=5000, step=10
-    )
-
-    mutation_prob = st.number_input(
-        "Mutation probability", min_value=0.0, max_value=1.0, value=0.1
-    )
-
-    random_seed_checkbox = st.checkbox("Set a random seed?")
-
-    if random_seed_checkbox:
-        random_seed = st.number_input("Random seed", min_value=0, step=1, value=42)
-        random.seed(random_seed)
-        np.random.seed(random_seed)
-
-###########indivual.py
-class Individual:
-    def __init__(self, genes: list[int]):
-        self.genes = genes
-
-def random_individual(num_genes: int) -> Individual:
-    return Individual(genes=permutation(range(num_genes)))
-###########
-def test_can_create_random_individual():
-    num_genes = 5
-    
-    individual = random_individual(num_genes=num_genes)
-
-    assert sorted(individual.genes) == list(range(num_genes))      
-     ###################################################   
-  
+def subtourelim(model, where):
+    if where == GRB.Callback.MIPSOL:
+        # make a list of edges selected in the solution
+        vals = model.cbGetSolution(model._vars)
+        selected = tuplelist((i,j) for i,j in model._vars.keys() if vals[i,j] > 0.5)
+        # find the shortest cycle in the selected edge list
+        tour,tours = subtour(selected)
+ 
+        if len(tour) < n:
+            model._subtours += 1
+            # add subtour elimination constraint for every pair of cities in tour
+            model.cbLazy(quicksum(model._vars[i,j]
+                                  for i,j in itertools.combinations(tour, 2))
+                         <= len(tour)-1)
+               #st.write(tour)
+        current_length = round(model.cbGet(GRB.Callback.MIPSOL_OBJ))
+        best = round(model.cbGet(GRB.Callback.MIPSOL_OBJBST))
+        bound = max(0,round(model.cbGet(GRB.Callback.MIPSOL_OBJBND)))
+        model._summary.markdown("**Sub tour elimination constraints** {:d} **Lower bound** {:d}km  \n**Current Solution**  {:d}km  - {:d} subtour(s)".format(model._subtours,bound,current_length,len(tours)))
+        #TODO update bound in other callback. Structure output
+        plt.plot([x[0] for x in points], [x[1] for x in points], 'o')
+        #print("total tours " + str(sum(len(t) for t in tours)))
+        for tour in tours:
+            tour.append(tour[0])
+            points_tour = [points[i] for i in tour]
+            plt.plot([x[0] for x in points_tour], [x[1] for x in points_tour], '-')
+        plt.axis([0, 105, 0, 105])
+        plt.xlabel("km")
+        plt.ylabel("km")
+        model._plot.pyplot()
         
-        
-        
-#########################################################  
-random.seed(42)
-np.random.seed(42)
+
+# Given a tuplelist of edges, find the shortest subtour
+
+def subtour(edges):
+    unvisited = list(range(n))
+    cycle = range(n+1) # initial length has 1 more city
+    cycles = []
+    while unvisited: # true if list is non-empty
+        thiscycle = []
+        neighbors = unvisited
+        while neighbors:
+            current = neighbors[0]
+            thiscycle.append(current)
+            unvisited.remove(current)
+            neighbors = [j for i,j in edges.select(current,'*') if j in unvisited]
+        if len(cycle) > len(thiscycle):
+            cycle = thiscycle
+        cycles.append(thiscycle)
+    return (cycle,cycles)
 
 
-cities = None
+n = st.slider('How many destinations to generate?', 5, 200, 5)
+# Create n random points
+points = [(random.randint(0,100),random.randint(0,100)) for i in range(n)]
 
+# Dictionary of Euclidean distance between each pair of points
 
-def crossover(parent1, parent2):
-    size = len(parent1)
+dist = {(i,j) :
+    math.sqrt(sum((points[i][k]-points[j][k])**2 for k in range(2)))
+    for i in range(n) for j in range(i)}
 
-    i, j = random_interval(parent1)
+m = Model()
+m._subtours = 0
+m._summary = st.empty()
+m._plot = st.empty()
+m._points = points
+# Create variables
 
-    c1 = parent1[i:j]
-    c2 = parent2[i:j]
+vars = m.addVars(dist.keys(), obj=dist, vtype=GRB.BINARY, name='e')
+for i,j in vars.keys():
+    vars[j,i] = vars[i,j] # edge in opposite direction
 
-    for k in range(size):
-        child_pos = (j + k) % size
+# Add degree-2 constraint
 
-        if parent2[child_pos] not in c1:
-            c1.append(parent2[child_pos])
+m.addConstrs(vars.sum(i,'*') == 2 for i in range(n))
 
-        if parent1[child_pos] not in c2:
-            c2.append(parent1[child_pos])
+# Optimize model
 
-    c1 = c1[-i:] + c1[:-i]
-    c2 = c2[-i:] + c2[:-i]
+m._vars = vars
+m.Params.lazyConstraints = 1
+m.optimize(subtourelim)
 
-    return c1, c2
+vals = m.getAttr('x', vars)
+selected = tuplelist((i,j) for i,j in vals.keys() if vals[i,j] > 0.5)
 
+tour,tours = subtour(selected)
+assert len(tour) == n
+tour.append(tour[0])
+points_tour = [points[i] for i in tour]
 
-def evaluate_fitness(individual):
-    dist = 0
-    for x, y in pairwise(individual):
-        dist += math.dist(cities[y], cities[x])
-    return 1 / dist
+current_length = round(m.objVal)
+best = round(m.objVal)
+bound = max(0,round(m.objVal))
+m._summary.markdown("**Sub tour elimination constraints** {:d} **Lower bound** {:d}km  \n**Current Solution**  {:d}km  - {:d} subtour(s)".format(m._subtours,bound,current_length,len(tours)))
 
+plt.plot([x[0] for x in points_tour], [x[1] for x in points_tour], '-o')
+plt.axis([0, 105, 0, 105])
+plt.xlabel("km")
+plt.ylabel("km")
+m._plot.pyplot()
 
-def mutate(individual, prob):
-    for i in range(len(individual)):
-        if random.random() < prob:
-            i, j = random_interval(individual)
-            individual[i], individual[j] = individual[j], individual[i]
-    return individual
-
-
-def breed(population, mutation_prob):
-    offspring = []
-
-    for i in range(len(population)):
-        for j in range(i + 1, len(population)):
-            child1, child2 = crossover(population[i], population[j])
-            child1 = mutate(child1, mutation_prob)
-            child2 = mutate(child2, mutation_prob)
-            offspring.extend([child1, child2])
-
-    return population + offspring
-
-
-def rank_selection(population, num_selected):
-    pop_by_fitness = sorted(
-        population, key=lambda ind: evaluate_fitness(ind), reverse=True
-    )
-    return pop_by_fitness[:num_selected]
-
-
-def genetic_tsp(
-    dataset_name,
-    num_generations,
-    population_size,
-    mutation_prob,
-    chart,
-    plot,
-    progress_bar,
-    current_distance,
-):
-    global cities
-    cities = read_input(f"data/{dataset_name}")
-
-    population = random_population(population_size, len(cities))
-
-    pop_fitness = [evaluate_fitness(individual) for individual in population]
-    best_solution = population[np.argmax(pop_fitness)]
-    best_distance = 1 / evaluate_fitness(best_solution)
-
-    progress_bar.progress(0)
-
-    current_distance.text("")
-
-    solution = copy(best_solution)
-    solution.append(solution[0])
-
-    fig, ax = plt.subplots()
-
-    ax.plot(
-        [cities[i].x for i in solution],
-        [cities[i].y for i in solution],
-        "-o",
-    )
-
-    plot.pyplot(fig)
-
-    chart.line_chart()
-
-    for gen in range(num_generations):
-        population_with_offspring = breed(population, mutation_prob)
-        population = rank_selection(population_with_offspring, population_size)
-
-        pop_fitness = [evaluate_fitness(individual) for individual in population]
-        best_solution = population[np.argmax(pop_fitness)]
-        best_distance = 1 / evaluate_fitness(best_solution)
-
-        progress_bar.progress(int(gen / num_generations * 100))
-        current_distance.write(f"Current distance: {best_distance}")
-        chart.add_rows({"Distance": [best_distance]})
-
-        solution = copy(best_solution)
-        solution.append(solution[0])
-        ax.clear()
-        ax.plot(
-            [cities[i].x for i in solution],
-            [cities[i].y for i in solution],
-            "-o",
-        )
-
-        plot.pyplot(fig)
-    progress_bar.empty()
-
-    return best_solution, best_distance
-
-
-        
-City = namedtuple("City", ["x", "y"])
-
-
-def pairwise(iterable):
-    iterable = list(iterable)
-    return zip(iterable, iterable[1:] + iterable[:1])
-
-
-def random_interval(individual):
-    i, j = random.sample(range(len(individual)), k=2)
-    i, j = min(i, j), max(i, j)
-    return i, j
-
-
-def random_population(population_size, num_genes):
-    return [list(permutation(range(num_genes))) for _ in range(population_size)]
-
-
-def read_input(path):
-    cities = []
-    with open(path, "r") as input_file:
-        for line in input_file:
-            x, y = line.split(" ")
-            city = City(float(x), float(y))
-            cities.append(city)
-    return cities    
-##########################################
-
-
-
+st.write('')
+#st.write('Optimal tour: %s' % str(tour))
+st.write('Optimal cost: {:0.1f}km'.format(m.objVal))
+st.write('Running time to optimize: {:0.1f}s'.format(m.Runtime))
+st.write('Sub tour constraint added: {:d}'.format(m._subtours)) 
