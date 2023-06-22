@@ -177,7 +177,7 @@ def genetic_tsp(
     progress_bar,
     current_distance,
 ):
-global cities
+    global cities
     cities = read_input(f"data/{dataset_name}")
 
     population = random_population(population_size, len(cities))
