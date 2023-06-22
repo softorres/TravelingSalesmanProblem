@@ -4,233 +4,93 @@
 #Autors: Mia Marte, Sofia Torres, Stephanie Saenz
 
 import random
-from math import sqrt
-import streamlit as st 
 
-import matplotlib.patches as patches
-import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.path import Path
- 
+import pandas as pd
+import streamlit as st
 
-cityL = []
-demographic = []
+from streamlit_solver import genetic_tsp
+from utils import read_input
 
-with st.container():
-    
-    st.title('Travelling salesman problem')
-    st.subheader("Project 2 by Sofia Torres, Stephanie Seanz, and Mia Marte")
-    st.write("Using the travelling salesman problem we incorporate generic algorithms to find\n the shortest path of the distance from the starting point ")
+st.set_page_config(layout="wide")
 
+"""
+# Genetic TSP
 
-class City:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
+Demo of genetic algorithm solver for the Traveling Salesman Problem.
 
-    def distance(self, city):
-        xdis = abs(self.x - city.x)
-        ydis = abs(self.y - city.y)
-        dis = sqrt((xdis**2) + (ydis**2))
-        return dis
+Feel free to play with the parameters in the sidebar and see how they impact the
+solution.
 
-    def __repr__(self):
-        return "(" + str(self.x) + "," + str(self.y) + ")"
-n = st.slider('How many destinations to generate?', 5, 200, 5)
-class Fitness:
-    def __init__(self, route):
-        self.route = route
-        self.dis = 0
-        self.fit = 0
+"""
 
-    def routeDistance(self):
-        if self.dis == 0:
-            pathDis = 0
-            # looping through route to calculate distance
-            for i in range(0, len(self.route)):
-                fromCity = self.route[i]
-                toCity = None
-                if i + 1 < len(self.route):
-                    # getting next city in route
-                    toCity = self.route[i + 1]
-                else:
-                    # returning to start city
-                    toCity = self.route[0]
-                pathDis += fromCity.distance(toCity)
-            self.dis = pathDis
-        return self.dis
+with st.sidebar:
+    select_dataset = st.selectbox(
+        label="Select a dataset",
+        options=("p01.in", "dj15.in", "dj38.in", "att48.in", "qa194.in"),
+    )
 
-    def fitnessScore(self):
-        if self.fit == 0:
-            self.fit = 1/float(self.routeDistance())
-        return self.fit
+    num_generations = st.number_input(
+        "Number of generations", min_value=10, max_value=5000, step=10
+    )
 
-def plotCities():
-    x = [cities.x for cities in cityL]
-    y = [cities.y for cities in cityL]
-    plt.scatter(x, y)
-    plt.plot(x, y)
-    plt.xlabel("X values")
-    plt.ylabel("Y values")
-    plt.show()
+    population_size = st.number_input(
+        "Population size", min_value=10, max_value=5000, step=10
+    )
 
+    mutation_prob = st.number_input(
+        "Mutation probability", min_value=0.0, max_value=1.0, value=0.1
+    )
 
-def initValues(size):
-    # Initial City List
-    for i in range(0, 25):
-        cityL.append(City(x=int(random.random()*200),
-                        y=int(random.random()*200)))
+    random_seed_checkbox = st.checkbox("Set a random seed?")
 
-    # Initial demographic
-    for i in range(0, size):
-        demographic.append(createRoute())
+    if random_seed_checkbox:
+        random_seed = st.number_input("Random seed", min_value=0, step=1, value=42)
+        random.seed(random_seed)
+        np.random.seed(random_seed)
 
-def createRoute():
-    route = random.sample(cityL, len(cityL))
-    return route
+col1, col2 = st.columns(2)
+
+col1.header("Best solution")
+progress_bar = st.empty()
+current_distance = st.empty()
+plot = col1.empty()
+done = st.empty()
+final_distance = st.empty()
+
+optimal_distances = {
+    "p01.in": 284,
+    "dj15.in": 3172,
+    "dj38.in": 6656,
+    "att48.in": 33523,
+    "qa194.in": 9352,
+}
+optimal_distance = st.write(
+    f"**Optimal Distance:** {optimal_distances[select_dataset]}"
+)
+
+col2.header("Distance over time")
+df = pd.DataFrame({"Distance": []})
+chart = col2.empty()
 
 
-def rankRoutes():
-    results = {}
+## Run the Genetic Algorithm
+best_solution, best_distance = genetic_tsp(
+    select_dataset,
+    num_generations,
+    population_size,
+    mutation_prob,
+    chart,
+    plot,
+    progress_bar,
+    current_distance,
+)
 
-    for i in range(0, len(demographic)):
-        results[i] = Fitness(route=demographic[i]).fitnessScore()
+progress_bar.empty()
+current_distance.empty()
 
-    return sorted(results.items(), key=lambda kv: kv[1], reverse=True)
-
-
-def slection(rankedList, size):
-    selectionResults = []
-
-    for i in range(0, size):
-        selectionResults.append(rankedList[i][0])
-    for i in range(0, len(rankedList) - size):
-        player_1 = random.randint(0, len(rankedList)-1)
-        player_2 = random.randint(0, len(rankedList)-1)
-        if rankedList[player_1][1] >= rankedList[player_2][1]:
-            selectionResults.append(rankedList[player_1][0])
-        else:
-            selectionResults.append(rankedList[player_2][0])
-
-    return selectionResults
-
-def matingPool(demographic, selectionResults):
-    pool = []
-
-    for i in range(0, len(selectionResults)):
-        index = selectionResults[i]
-        pool.append(demographic[index])
-    return pool
+cities = read_input(f"data/{select_dataset}")
 
 
-def breed(p1, p2):
-    child = []
-    childP1 = []
-    childP2 = []
-
-    # ordered crossover
-    geneA = int(random.random() * len(p1))
-    geneB = int(random.random() * len(p1))
-
-    startGene = min(geneA, geneB)
-    endGene = max(geneA, geneB)
-
-    for i in range(startGene, endGene):
-        childP1.append(p1[i])
-
-    childP2 = [gene for gene in p2 if gene not in childP1]
-
-    child = childP1 + childP2
-    return child
-
-def breedPop(pool, size):
-    children = []
-    total = len(pool) - size
-    sameplePool = random.sample(pool, len(pool))
-
-    # using elitism
-    for i in range(0, size):
-        children.append(pool[i])
-
-    # breed for rest of pool
-    for i in range(0, total):
-        child = breed(sameplePool[i], sameplePool[(len(pool) - i) - 1])
-        children.append(child)
-    return children
-
-
-def mutate(individual, mutationRate):
-    for swapped in range(len(individual)):
-        if(random.random() < mutationRate):
-            swapWith = int(random.random() * len(individual))
-
-            city1 = individual[swapped]
-            city2 = individual[swapWith]
-
-            individual[swapped] = city2
-            individual[swapWith] = city1
-    return individual
-
-def mutatedemographic(children, mutationRate):
-    mutatedPop = []
-
-    for i in range(0, len(children)):
-        mutated = mutate(children[i], mutationRate)
-        mutatedPop.append(mutated)
-    return mutatedPop
-
-
-def nextGeneration(currentGen, eliteSize, mutationRate):
-    rankedList = rankRoutes()
-    selectionResults = slection(rankedList, eliteSize)
-    matingpool = matingPool(currentGen, selectionResults)
-    children = breedPop(matingpool, eliteSize)
-    nextGeneration = mutatedemographic(children, mutationRate)
-    return nextGeneration
-def geneAlgo(popSize, eliteSize, mutationRate, generations):
-    global demographic
-    initValues(popSize)
-    progress = []
-    print("The initial distance is: " + str(1 / rankRoutes()[0][1]))
-    progress.append(1 / rankRoutes()[0][1])
-
-    for i in range(0, generations):
-        demographic = nextGeneration(demographic, eliteSize, mutationRate)
-        progress.append(1 / rankRoutes()[0][1])
-
-    print("The final distance is: " + str(1 / rankRoutes()[0][1]))
-    bestRouteIndex = rankRoutes()[0][0]
-    bestRoute = demographic[bestRouteIndex]
-    fig, axs = plt.subplots(2)
-   
-
-    axs[0].plot(progress)
-    axs[0].set_title("Progress Graph")
-    #axs[1].set_ylabel('\nDistance\n')
-    
-
-    x = [cities.x for cities in bestRoute]
-    x.append(bestRoute[0].x)
-    y = [cities.y for cities in bestRoute]
-    y.append(bestRoute[0].y)
- 
-    axs[1].set_title("Final Path Graph")
-    axs[1].scatter(x, y)
-    axs[1].plot(x, y)
-    axs[1].set_xlabel("X values")
-    axs[1].set_ylabel("Y values")
-
-    plt.tight_layout()
-    plt.show()
-    return bestRoute
-if __name__ == '__main__':
-    print("Start")
-
-    initValues(size=25)
-    plotCities()
-    bestRoute = geneAlgo(popSize=100, eliteSize=20,
-                         mutationRate=0.01, generations=500)
-    
-    cityL = []
-    for i in range (0, 25):
-        cityL.append(City(x=int(random.random() * 200), y=int(random.random() *200)))
+done.write("**Done**!")
+final_distance.write(f"**Final Distance:** {best_distance}")
