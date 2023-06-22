@@ -16,8 +16,8 @@ import matplotlib.pyplot as plt
 
 
 
-from streamlit_solver import genetic_tsp
-from utils import read_input
+#from streamlit_solver import genetic_tsp
+#from utils import read_input
 
 st.set_page_config(layout="wide")
 
