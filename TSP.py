@@ -45,11 +45,12 @@ optimal_distances = {
     "dj38.in": 6656,
     "att48.in": 33523,
     "qa194.in": 9352,
-}
+
+
 optimal_distance = st.write(
     f"**Optimal Distance:** {optimal_distances[select_dataset]}"
 )
-
+}
 col2.header("Distance over time")
 df = pd.DataFrame({"Distance": []})
 chart = col2.empty()
