@@ -30,7 +30,55 @@ Feel free to play with the parameters in the sidebar and see how they impact the
 solution.
 
 """
+col1, col2 = st.columns(2)
 
+col1.header("Best solution")
+progress_bar = st.empty()
+current_distance = st.empty()
+plot = col1.empty()
+done = st.empty()
+final_distance = st.empty()
+
+optimal_distances = {
+    "p01.in": 284,
+    "dj15.in": 3172,
+    "dj38.in": 6656,
+    "att48.in": 33523,
+    "qa194.in": 9352,
+}
+optimal_distance = st.write(
+    f"**Optimal Distance:** {optimal_distances[select_dataset]}"
+)
+
+col2.header("Distance over time")
+df = pd.DataFrame({"Distance": []})
+chart = col2.empty()
+
+
+## Run the Genetic Algorithm
+best_solution, best_distance = genetic_tsp(
+    select_dataset,
+    num_generations,
+    population_size,
+    mutation_prob,
+    chart,
+    plot,
+    progress_bar,
+    current_distance,
+)
+
+progress_bar.empty()
+current_distance.empty()
+
+cities = read_input(f"data/{select_dataset}")
+
+
+done.write("**Done**!")
+final_distance.write(f"**Final Distance:** {best_distance}")
+
+
+
+#######
 with st.sidebar:
     select_dataset = st.selectbox(
         label="Select a dataset",
@@ -234,50 +282,6 @@ def read_input(path):
             cities.append(city)
     return cities    
 ##########################################
-col1, col2 = st.columns(2)
 
-col1.header("Best solution")
-progress_bar = st.empty()
-current_distance = st.empty()
-plot = col1.empty()
-done = st.empty()
-final_distance = st.empty()
-
-optimal_distances = {
-    "p01.in": 284,
-    "dj15.in": 3172,
-    "dj38.in": 6656,
-    "att48.in": 33523,
-    "qa194.in": 9352,
-}
-optimal_distance = st.write(
-    f"**Optimal Distance:** {optimal_distances[select_dataset]}"
-)
-
-col2.header("Distance over time")
-df = pd.DataFrame({"Distance": []})
-chart = col2.empty()
-
-
-## Run the Genetic Algorithm
-best_solution, best_distance = genetic_tsp(
-    select_dataset,
-    num_generations,
-    population_size,
-    mutation_prob,
-    chart,
-    plot,
-    progress_bar,
-    current_distance,
-)
-
-progress_bar.empty()
-current_distance.empty()
-
-cities = read_input(f"data/{select_dataset}")
-
-
-done.write("**Done**!")
-final_distance.write(f"**Final Distance:** {best_distance}")
 
 
