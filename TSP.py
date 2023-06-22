@@ -72,7 +72,7 @@ def test_can_create_random_individual():
     assert sorted(individual.genes) == list(range(num_genes))      
      ###################################################   
         
- City = namedtuple("City", ["x", "y"])
+City = namedtuple("City", ["x", "y"])
 
 
 def pairwise(iterable):
